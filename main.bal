@@ -1,10 +1,10 @@
 import ballerina/http;
 
 // Define the Task record
-type Task record {|
-    int id;
-    string title;
-    string description;
+type Task record {| 
+    int id; 
+    string title; 
+    string description; 
     string priority; //"low", "medium", "high"
     string status;    //"pending", "in progress", "completed"
 |};
@@ -20,7 +20,7 @@ function addTask(Task task) {
 }
 
 function getTaskById(int id) returns Task|error {
-    foreach var task in tasks {
+    foreach Task task in tasks {
         if task.id == id {
             return task;
         }
@@ -33,7 +33,7 @@ function getAllTasks() returns Task[] {
 }
 
 function updateTask(int id, Task updatedTask) returns Task|error {
-    foreach var i in 0 ..< tasks.length() {
+    foreach int i in 0 ..< tasks.length() {
         if tasks[i].id == id {
             updatedTask.id = id;
             tasks[i] = updatedTask;
@@ -44,7 +44,7 @@ function updateTask(int id, Task updatedTask) returns Task|error {
 }
 
 function deleteTask(int id) returns error? {
-    foreach var i in 0 ..< tasks.length() {
+    foreach int i in 0 ..< tasks.length() {
         if tasks[i].id == id {
             tasks.remove(i);
             return;
@@ -74,7 +74,6 @@ service /tasks on new http:Listener(8080) {
     resource function put [int id](http:Caller caller, http:Request req) returns error? {
         json payload = check req.getJsonPayload();
         Task updatedTask = check payload.cloneWithType(Task);
-
         Task result = check updateTask(id, updatedTask);
         check caller->respond(result);
     }
