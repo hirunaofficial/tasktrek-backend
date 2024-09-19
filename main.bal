@@ -44,13 +44,20 @@ function updateTask(int id, Task updatedTask) returns Task|error {
 }
 
 function deleteTask(int id) returns error? {
-    foreach int i in 0 ..< tasks.length() {
-        if tasks[i].id == id {
-            tasks.remove(i);
-            return;
+    Task[] updatedTasks = [];
+
+    foreach Task task in tasks {
+        if task.id != id {
+            updatedTasks.push(task);
         }
     }
-    return error("Task not found");
+
+    if tasks.length() == updatedTasks.length() {
+        return error("Task not found");
+    }
+
+    tasks = updatedTasks;
+    return;
 }
 
 // HTTP Service to manage tasks
