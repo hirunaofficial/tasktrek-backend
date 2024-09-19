@@ -1,4 +1,4 @@
-import ballerina/io;
+import ballerina/http;
 
 // Define the Task record
 type Task record {|
@@ -53,6 +53,34 @@ function deleteTask(int id) returns error? {
     return error("Task not found");
 }
 
-public function main() {
-    io:println("Hello, World!");
+// HTTP Service to manage tasks
+service /tasks on new http:Listener(8080) {
+
+    resource function post .(http:Caller caller, http:Request req) returns error? {
+        json payload = check req.getJsonPayload();
+        Task newTask = check payload.cloneWithType(Task);
+        addTask(newTask);
+        check caller->respond(newTask);
+    }
+
+    resource function get .() returns Task[] {
+        return getAllTasks();
+    }
+
+    resource function get [int id]() returns Task|error {
+        return getTaskById(id);
+    }
+
+    resource function put [int id](http:Caller caller, http:Request req) returns error? {
+        json payload = check req.getJsonPayload();
+        Task updatedTask = check payload.cloneWithType(Task);
+
+        Task result = check updateTask(id, updatedTask);
+        check caller->respond(result);
+    }
+
+    resource function delete [int id](http:Caller caller) returns error? {
+        check deleteTask(id);
+        check caller->respond("Task deleted");
+    }
 }
