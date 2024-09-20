@@ -1,4 +1,12 @@
 import ballerina/http;
+import ballerinax/mysql;
+import ballerinax/mysql.driver as _;
+
+configurable string host = "localhost";
+configurable int port = 3306;
+configurable string user = "root";
+configurable string password = "";
+configurable string database = "task_trek";
 
 // Define the Task record
 type Task record {| 
@@ -15,6 +23,9 @@ type Response record {|
     string message;
     json|Task[]|Task data?;
 |};
+
+// MySQL client
+mysql:Client dbClient = check new (host, user, password, database, port);
 
 // In-memory storage for tasks
 Task[] tasks = [];
