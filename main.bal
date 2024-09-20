@@ -11,7 +11,7 @@ configurable string database = "task_trek";
 
 // Define the Task record
 type Task record {| 
-    int id; 
+    int? id;
     string title; 
     string description; 
     string priority; //"low", "medium", "high"
@@ -30,7 +30,7 @@ mysql:Client dbClient = check new (host, user, password, database, port);
 
 // Function to create the Tasks table if it doesn't exist
 function createTasksTable() returns error? {
-    sql:ExecutionResult result = check dbClient->execute(`
+    sql:ExecutionResult _ = check dbClient->execute(`
         CREATE TABLE IF NOT EXISTS Tasks (
             id INT AUTO_INCREMENT PRIMARY KEY,
             title VARCHAR(255) NOT NULL,
@@ -39,9 +39,6 @@ function createTasksTable() returns error? {
             status ENUM('pending', 'in progress', 'completed') NOT NULL
         );
     `);
-    if result.affectedRowCount == 0 {
-        return error("Failed to add table");
-    }
 }
 
 // Add a task to the MySQL database
@@ -49,6 +46,7 @@ function addTask(Task task) returns error? {
     sql:ExecutionResult result = check dbClient->execute(`
         INSERT INTO Tasks (title, description, priority, status)
         VALUES (${task.title}, ${task.description}, ${task.priority}, ${task.status})`);
+    
     if result.affectedRowCount == 0 {
         return error("Failed to add task");
     }
