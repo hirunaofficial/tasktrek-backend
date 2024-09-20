@@ -11,11 +11,18 @@ configurable string database = "task_trek";
 
 // Define the Task record
 type Task record {| 
-    int? id;
+    int id;
     string title; 
     string description; 
     string priority; //"low", "medium", "high"
     string status;    //"pending", "in progress", "completed"
+|};
+
+type TaskWithoutId record {| 
+    string title; 
+    string description; 
+    string priority;
+    string status;
 |};
 
 // Define the response record
@@ -42,7 +49,7 @@ function createTasksTable() returns error? {
 }
 
 // Add a task to the MySQL database
-function addTask(Task task) returns error? {
+function addTask(TaskWithoutId task) returns error? {
     sql:ExecutionResult result = check dbClient->execute(`
         INSERT INTO Tasks (title, description, priority, status)
         VALUES (${task.title}, ${task.description}, ${task.priority}, ${task.status})`);
@@ -107,7 +114,8 @@ service /tasks on new http:Listener(8080) {
     // Add a new task
     resource function post .(http:Caller caller, http:Request req) returns error? {
         json payload = check req.getJsonPayload();
-        Task newTask = check payload.cloneWithType(Task);
+        TaskWithoutId newTask = check payload.cloneWithType(TaskWithoutId); // Use TaskWithoutId
+        
         check addTask(newTask);
         
         Response res = {
