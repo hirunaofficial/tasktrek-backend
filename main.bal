@@ -1,4 +1,5 @@
 import ballerina/http;
+import ballerina/sql;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
 
@@ -18,64 +19,67 @@ type Task record {|
 |};
 
 // Define the response record
-type Response record {|
-    string status;
-    string message;
+type Response record {| 
+    string status; 
+    string message; 
     json|Task[]|Task data?;
 |};
 
 // MySQL client
 mysql:Client dbClient = check new (host, user, password, database, port);
 
-// In-memory storage for tasks
-Task[] tasks = [];
-int nextId = 1;
-
-function addTask(Task task) {
-    task.id = nextId;
-    nextId += 1;
-    tasks.push(task);
-}
-
-function getTaskById(int id) returns Task|error {
-    foreach Task task in tasks {
-        if (task.id == id) {
-            return task;
-        }
+// Add a task to the MySQL database
+function addTask(Task task) returns error? {
+    sql:ExecutionResult result = check dbClient->execute(`
+        INSERT INTO Tasks (title, description, priority, status)
+        VALUES (${task.title}, ${task.description}, ${task.priority}, ${task.status})`);
+    if result.affectedRowCount == 0 {
+        return error("Failed to add task");
     }
-    return error("Task not found");
 }
 
-function getAllTasks() returns Task[] {
+// Get a task by ID from the MySQL database
+function getTaskById(int id) returns Task|error {
+    Task|sql:Error task = dbClient->queryRow(`SELECT * FROM Tasks WHERE id = ${id}`, Task);
+    if task is sql:NoRowsError {
+        return error("Task not found");
+    }
+    return task;
+}
+
+function getAllTasks() returns Task[]|error {
+    stream<Task, sql:Error?> taskStream = dbClient->query(`SELECT * FROM Tasks`, Task);
+    Task[] tasks = [];
+    
+    error? e = from Task task in taskStream
+               do {
+                   tasks.push(task);
+               };
+
+    if e is sql:Error {
+        return e;
+    }
+
     return tasks;
 }
 
-function updateTask(int id, Task updatedTask) returns Task|error {
-    foreach int i in 0 ..< tasks.length() {
-        if (tasks[i].id == id) {
-            updatedTask.id = id;
-            tasks[i] = updatedTask;
-            return updatedTask;
-        }
-    }
-    return error("Task not found");
-}
-
-function deleteTask(int id) returns error? {
-    Task[] updatedTasks = [];
-
-    foreach Task task in tasks {
-        if (task.id != id) {
-            updatedTasks.push(task);
-        }
-    }
-
-    if (tasks.length() == updatedTasks.length()) {
+// Update a task by ID in the MySQL database
+function updateTask(int id, Task updatedTask) returns error? {
+    sql:ExecutionResult result = check dbClient->execute(`
+        UPDATE Tasks SET title = ${updatedTask.title}, description = ${updatedTask.description},
+        priority = ${updatedTask.priority}, status = ${updatedTask.status}
+        WHERE id = ${id}`);
+    if result.affectedRowCount == 0 {
         return error("Task not found");
     }
+}
 
-    tasks = updatedTasks;
-    return;
+// Delete a task by ID from the MySQL database
+function deleteTask(int id) returns error? {
+    sql:ExecutionResult result = check dbClient->execute(`DELETE FROM Tasks WHERE id = ${id}`);
+    if result.affectedRowCount == 0 {
+        return error("Task not found");
+    }
 }
 
 // HTTP Service to manage tasks
@@ -85,7 +89,7 @@ service /tasks on new http:Listener(8080) {
     resource function post .(http:Caller caller, http:Request req) returns error? {
         json payload = check req.getJsonPayload();
         Task newTask = check payload.cloneWithType(Task);
-        addTask(newTask);
+        check addTask(newTask);
         
         Response res = {
             status: "success",
@@ -97,7 +101,7 @@ service /tasks on new http:Listener(8080) {
 
     // Get all tasks
     resource function get .(http:Caller caller) returns error? {
-        Task[] allTasks = getAllTasks();
+        Task[] allTasks = check getAllTasks();
         Response res = {
             status: "success",
             message: "tasks retrieved successfully",
@@ -129,19 +133,19 @@ service /tasks on new http:Listener(8080) {
     resource function put [int id](http:Caller caller, http:Request req) returns error? {
         json payload = check req.getJsonPayload();
         Task updatedTask = check payload.cloneWithType(Task);
-        Task|error result = updateTask(id, updatedTask);
+        error? result = updateTask(id, updatedTask);
 
-        if result is Task {
+        if result is error {
             Response res = {
-                status: "success",
-                message: "task updated successfully",
-                data: result
+                status: "error",
+                message: "Task not found"
             };
             check caller->respond(res);
         } else {
             Response res = {
-                status: "error",
-                message: "Task not found"
+                status: "success",
+                message: "task updated successfully",
+                data: updatedTask
             };
             check caller->respond(res);
         }
