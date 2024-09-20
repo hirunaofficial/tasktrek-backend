@@ -28,6 +28,22 @@ type Response record {|
 // MySQL client
 mysql:Client dbClient = check new (host, user, password, database, port);
 
+// Function to create the Tasks table if it doesn't exist
+function createTasksTable() returns error? {
+    sql:ExecutionResult result = check dbClient->execute(`
+        CREATE TABLE IF NOT EXISTS Tasks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            priority ENUM('low', 'medium', 'high') NOT NULL,
+            status ENUM('pending', 'in progress', 'completed') NOT NULL
+        );
+    `);
+    if result.affectedRowCount == 0 {
+        return error("Failed to add table");
+    }
+}
+
 // Add a task to the MySQL database
 function addTask(Task task) returns error? {
     sql:ExecutionResult result = check dbClient->execute(`
@@ -42,7 +58,7 @@ function addTask(Task task) returns error? {
 function getTaskById(int id) returns Task|error {
     Task|sql:Error task = dbClient->queryRow(`SELECT * FROM Tasks WHERE id = ${id}`, Task);
     if task is sql:NoRowsError {
-        return error("Task not found");
+        return error("No task found with the specified ID.");
     }
     return task;
 }
@@ -70,7 +86,7 @@ function updateTask(int id, Task updatedTask) returns error? {
         priority = ${updatedTask.priority}, status = ${updatedTask.status}
         WHERE id = ${id}`);
     if result.affectedRowCount == 0 {
-        return error("Task not found");
+        return error("No task found with the specified ID to update.");
     }
 }
 
@@ -78,12 +94,17 @@ function updateTask(int id, Task updatedTask) returns error? {
 function deleteTask(int id) returns error? {
     sql:ExecutionResult result = check dbClient->execute(`DELETE FROM Tasks WHERE id = ${id}`);
     if result.affectedRowCount == 0 {
-        return error("Task not found");
+        return error("No task found with the specified ID to delete.");
     }
 }
 
 // HTTP Service to manage tasks
 service /tasks on new http:Listener(8080) {
+
+    // Initialization function to create the table
+    function init() returns error? {
+        check createTasksTable();
+    }
 
     // Add a new task
     resource function post .(http:Caller caller, http:Request req) returns error? {
@@ -93,7 +114,7 @@ service /tasks on new http:Listener(8080) {
         
         Response res = {
             status: "success",
-            message: "task added successfully",
+            message: "Task added successfully.",
             data: newTask
         };
         check caller->respond(res);
@@ -104,7 +125,7 @@ service /tasks on new http:Listener(8080) {
         Task[] allTasks = check getAllTasks();
         Response res = {
             status: "success",
-            message: "tasks retrieved successfully",
+            message: "Tasks retrieved successfully.",
             data: allTasks
         };
         check caller->respond(res);
@@ -116,14 +137,14 @@ service /tasks on new http:Listener(8080) {
         if task is Task {
             Response res = {
                 status: "success",
-                message: "task retrieved successfully",
+                message: "Task retrieved successfully.",
                 data: task
             };
             check caller->respond(res);
         } else {
             Response res = {
                 status: "error",
-                message: "Task not found"
+                message: "No task found with the specified ID."
             };
             check caller->respond(res);
         }
@@ -138,13 +159,13 @@ service /tasks on new http:Listener(8080) {
         if result is error {
             Response res = {
                 status: "error",
-                message: "Task not found"
+                message: "No task found with the specified ID to update."
             };
             check caller->respond(res);
         } else {
             Response res = {
                 status: "success",
-                message: "task updated successfully",
+                message: "Task updated successfully.",
                 data: updatedTask
             };
             check caller->respond(res);
@@ -157,13 +178,13 @@ service /tasks on new http:Listener(8080) {
         if deleteResult is error {
             Response res = {
                 status: "error",
-                message: "Task not found"
+                message: "No task found with the specified ID to delete."
             };
             check caller->respond(res);
         } else {
             Response res = {
                 status: "success",
-                message: "task deleted successfully"
+                message: "Task deleted successfully."
             };
             check caller->respond(res);
         }
